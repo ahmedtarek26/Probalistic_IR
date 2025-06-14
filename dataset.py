@@ -1,5 +1,6 @@
 from collections import defaultdict
 from sklearn.datasets import fetch_20newsgroups
+
 def load_20newsgroups_data(limit: int = 100):
     """Load a subset of the 20 Newsgroups dataset and generate synthetic queries and qrels."""
     try:

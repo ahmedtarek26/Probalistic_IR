@@ -3,6 +3,17 @@ from collections import defaultdict
 from typing import List
 from index import InvertedIndex, preprocess
 
+def print_ranking(title, ranking):
+    """Print ranking results in a formatted way."""
+    print(f"\n{title}:")
+    if not ranking:
+        print("No results found.")
+        return
+    for i, (doc_id, score, text) in enumerate(ranking, 1):
+        print(f"{i}. Document ID: {doc_id}, Score: {score:.4f}")
+        print(f"   Text: {text}")
+
+
 
 def bm25_score(query: str, index: InvertedIndex, passages: dict, k1: float = 1.5, b: float = 0.75):
     """Compute BM25 scores for passages and return top results."""
