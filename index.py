@@ -6,9 +6,24 @@ from nltk.stem.porter import PorterStemmer
 from nltk.tokenize import word_tokenize
 
 
-# Download NLTK resources when the module is imported
-nltk.download("punkt", quiet=True)
-nltk.download("stopwords", quiet=True)
+# Ensure required NLTK data is available without forcing a download
+try:
+    nltk.data.find("tokenizers/punkt")
+except LookupError:
+    try:
+        nltk.download("punkt", quiet=True)
+    except Exception as e:
+        print(f"NLTK resource 'punkt' not found and could not be downloaded: {e}")
+
+try:
+    nltk.data.find("corpora/stopwords")
+except LookupError:
+    try:
+        nltk.download("stopwords", quiet=True)
+    except Exception as e:
+        print(
+            f"NLTK resource 'stopwords' not found and could not be downloaded: {e}"
+        )
 
 stop_words = set(stopwords.words("english"))
 stemmer = PorterStemmer()
