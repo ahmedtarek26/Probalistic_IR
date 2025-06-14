@@ -7,7 +7,6 @@ from collections import defaultdict
 import math
 import sys
 from sklearn.datasets import fetch_20newsgroups
-import random
 
 # Download required NLTK resources
 try:
