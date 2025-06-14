@@ -12,7 +12,6 @@ import random
 # Download required NLTK resources
 try:
     nltk.download('punkt', quiet=True)
-    nltk.download('punkt_tab', quiet=True)
     nltk.download('stopwords', quiet=True)
 except Exception as e:
     print(f"Error downloading NLTK resources: {e}")
@@ -32,10 +31,12 @@ def preprocess(text):
 def load_20newsgroups_data(limit=100):
     """Load a subset of 20 Newsgroups data and generate synthetic queries and qrels."""
     try:
-        # Fetch a subset of 20 Newsgroups (e.g., 2 categories for manageability)
-        news = fetch_20newsgroups(subset='all', 
-                                  #categories=['sci.space', 'comp.graphics'], 
-                                  remove=('headers', 'footers', 'quotes'))
+        # Fetch only the categories needed for our example queries
+        news = fetch_20newsgroups(
+            subset='all',
+            categories=['sci.space', 'comp.graphics'],
+            remove=('headers', 'footers', 'quotes')
+        )
         passages = {}
         for i, doc in enumerate(news.data[:limit]):  # Limit for performance
             if doc.strip():  # Skip empty documents
@@ -47,11 +48,13 @@ def load_20newsgroups_data(limit=100):
             "q2": "computer graphics"
         }
         qrels = defaultdict(list)
+        label_map = {i: cat for i, cat in enumerate(news.target_names)}
         for i, label in enumerate(news.target[:limit]):
             if str(i) in passages:
-                if label == 0:  # sci.space
+                category = label_map.get(label, "")
+                if category == "sci.space":
                     qrels["q1"].append(str(i))
-                elif label == 1:  # comp.graphics
+                elif category == "comp.graphics":
                     qrels["q2"].append(str(i))
 
         return passages, queries, qrels
