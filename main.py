@@ -2,6 +2,7 @@ import nltk
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from nltk.stem.porter import PorterStemmer
+import argparse
 import json
 from collections import defaultdict
 import math
@@ -346,68 +347,77 @@ def print_ranking(title, ranking):
         print(f"{i}. Document ID: {doc_id}, Score: {score:.4f}")
         print(f"   Text: {text}")
 
-if __name__ == "__main__":
-    # Load 20 Newsgroups dataset
+def run_query(query, index, passages, file_handle):
+    """Execute a single query and log the results."""
+    print(f"\nProcessing query: {query}")
+    file_handle.write(f"\nQuery: {query}\n")
+
+    bm25_ranking = bm25_score(query, index, passages)
+    print_ranking("BM25 Ranking", bm25_ranking)
+    file_handle.write("\nBM25 Ranking:\n")
+    for doc_id, score, text in bm25_ranking:
+        file_handle.write(f"Document ID: {doc_id}, Score: {score:.4f}, Text: {text}\n")
+
+    bim_ranking = bim_score(query, index, passages)
+    print_ranking("BIM Ranking", bim_ranking)
+    file_handle.write("\nBIM Ranking:\n")
+    for doc_id, score, text in bim_ranking:
+        file_handle.write(f"Document ID: {doc_id}, Score: {score:.4f}, Text: {text}\n")
+
+    if bm25_ranking:
+        feedback_ranking = relevance_feedback(index, query, [bm25_ranking[0][0]], passages)
+        print_ranking("Relevance Feedback Ranking", feedback_ranking)
+        file_handle.write("\nRelevance Feedback Ranking:\n")
+        for doc_id, score, text in feedback_ranking:
+            file_handle.write(f"Document ID: {doc_id}, Score: {score:.4f}, Text: {text}\n")
+
+    pseudo_ranking = pseudo_relevance_feedback(index, query, passages)
+    print_ranking("Pseudo-Relevance Feedback Ranking", pseudo_ranking)
+    file_handle.write("\nPseudo-Relevance Feedback Ranking:\n")
+    for doc_id, score, text in pseudo_ranking:
+        file_handle.write(f"Document ID: {doc_id}, Score: {score:.4f}, Text: {text}\n")
+
+
+def main():
+    """Entry point for command-line execution."""
+    parser = argparse.ArgumentParser(description="Simple probabilistic IR demo")
+    parser.add_argument("-q", "--query", help="Query string to search")
+    parser.add_argument("-l", "--limit", type=int, default=100, help="Number of documents to load from dataset")
+    args = parser.parse_args()
+
     print("Loading 20 Newsgroups dataset...")
-    passages, queries, qrels = load_20newsgroups_data(limit=100)
+    passages, queries, qrels = load_20newsgroups_data(limit=args.limit)
     if not passages:
         print("Failed to load dataset. Exiting.")
-        sys.exit(1)
+        return
     print(f"Loaded {len(passages)} documents and {len(queries)} queries.")
 
-    # Build the index
     index = InvertedIndex()
     for doc_id, text in passages.items():
         index.add_document(doc_id, text)
     index.save("index.json")
     print("Index saved to 'index.json'.")
 
-    # Prompt user for query
-    print("\nSample queries: 'space exploration', 'computer graphics'")
     with open("results.txt", "w", encoding="utf-8") as f:
-        while True:
-            sample_query = input("\nEnter your query (or 'quit' to exit): ").strip()
-            if sample_query.lower() == 'quit':
-                print("Exiting program.")
-                break
-            if not sample_query:
-                print("Error: Query cannot be empty. Please try again.")
-                continue
+        if args.query:
+            run_query(args.query, index, passages, f)
+        else:
+            print("\nSample queries: 'space exploration', 'computer graphics'")
+            while True:
+                sample_query = input("\nEnter your query (or 'quit' to exit): ").strip()
+                if sample_query.lower() == 'quit':
+                    print("Exiting program.")
+                    break
+                if not sample_query:
+                    print("Error: Query cannot be empty. Please try again.")
+                    continue
+                run_query(sample_query, index, passages, f)
 
-            print(f"\nProcessing query: {sample_query}")
-            f.write(f"\nQuery: {sample_query}\n")
-
-            # BM25 ranking
-            bm25_ranking = bm25_score(sample_query, index, passages)
-            print_ranking("BM25 Ranking", bm25_ranking)
-            f.write("\nBM25 Ranking:\n")
-            for doc_id, score, text in bm25_ranking:
-                f.write(f"Document ID: {doc_id}, Score: {score:.4f}, Text: {text}\n")
-
-            # BIM ranking
-            bim_ranking = bim_score(sample_query, index, passages)
-            print_ranking("BIM Ranking", bim_ranking)
-            f.write("\nBIM Ranking:\n")
-            for doc_id, score, text in bim_ranking:
-                f.write(f"Document ID: {doc_id}, Score: {score:.4f}, Text: {text}\n")
-
-            # Relevance feedback
-            if bm25_ranking:
-                feedback_ranking = relevance_feedback(index, sample_query, [bm25_ranking[0][0]], passages)
-                print_ranking("Relevance Feedback Ranking", feedback_ranking)
-                f.write("\nRelevance Feedback Ranking:\n")
-                for doc_id, score, text in feedback_ranking:
-                    f.write(f"Document ID: {doc_id}, Score: {score:.4f}, Text: {text}\n")
-
-            # Pseudo-relevance feedback
-            pseudo_ranking = pseudo_relevance_feedback(index, sample_query, passages)
-            print_ranking("Pseudo-Relevance Feedback Ranking", pseudo_ranking)
-            f.write("\nPseudo-Relevance Feedback Ranking:\n")
-            for doc_id, score, text in pseudo_ranking:
-                f.write(f"Document ID: {doc_id}, Score: {score:.4f}, Text: {text}\n")
-
-    # Evaluate with MAP for predefined queries
     map_score = evaluate_system(index, queries, qrels)
     print(f"\nMAP Score for predefined queries: {map_score:.4f}")
     with open("results.txt", "a", encoding="utf-8") as f:
         f.write(f"\nMAP Score for predefined queries: {map_score:.4f}\n")
+
+
+if __name__ == "__main__":
+    main()
