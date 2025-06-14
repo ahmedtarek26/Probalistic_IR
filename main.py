@@ -20,7 +20,19 @@ stop_words = set(stopwords.words('english'))
 stemmer = PorterStemmer()
 
 def preprocess(text):
-    """Preprocess text by tokenizing, removing stopwords, and stemming."""
+    """Preprocess a text string.
+
+    Parameters
+    ----------
+    text : str
+        Raw text to be tokenized.
+
+    Returns
+    -------
+    list[str]
+        A list of stemmed terms with stop words removed. If an exception
+        occurs during processing an empty list is returned.
+    """
     try:
         tokens = word_tokenize(text.lower())
         return [stemmer.stem(token) for token in tokens if token.isalnum() and token not in stop_words]
@@ -28,7 +40,21 @@ def preprocess(text):
         return []
 
 def load_20newsgroups_data(limit=100):
-    """Load a subset of 20 Newsgroups data and generate synthetic queries and qrels."""
+    """Load a subset of the 20 Newsgroups dataset.
+
+    Parameters
+    ----------
+    limit : int, optional
+        Maximum number of documents to fetch for the example.  A lower
+        number speeds up execution during testing.
+
+    Returns
+    -------
+    tuple[dict, dict, dict]
+        ``passages`` is a mapping of document identifiers to raw text,
+        ``queries`` contains example queries and ``qrels`` maps query ids to
+        lists of relevant document identifiers.
+    """
     try:
         # Fetch only the categories needed for our example queries
         news = fetch_20newsgroups(
@@ -62,7 +88,7 @@ def load_20newsgroups_data(limit=100):
         return {}, {}, defaultdict(list)
 
 class InvertedIndex:
-    """A simple inverted index for storing term-passage mappings."""
+    """A simple inverted index for storing term--document mappings."""
     def __init__(self):
         self.index = defaultdict(list)
         self.doc_lengths = {}
@@ -70,7 +96,15 @@ class InvertedIndex:
         self.total_docs = 0
 
     def add_document(self, doc_id, text):
-        """Add a passage to the index."""
+        """Add a document to the index.
+
+        Parameters
+        ----------
+        doc_id : str
+            Identifier of the document.
+        text : str
+            Raw document text.
+        """
         tokens = preprocess(text)
         self.doc_lengths[doc_id] = len(tokens)
         self.total_docs += 1
@@ -82,7 +116,13 @@ class InvertedIndex:
             self.index[term].append((doc_id, freq))
 
     def save(self, filename):
-        """Save the index to a file."""
+        """Persist the index to disk.
+
+        Parameters
+        ----------
+        filename : str
+            Path of the output JSON file.
+        """
         try:
             with open(filename, 'w', encoding='utf-8') as f:
                 json.dump({
@@ -95,7 +135,37 @@ class InvertedIndex:
             print(f"Error saving index: {e}")
 
 def bm25_score(query, index, passages, k1=1.5, b=0.75):
-    """Compute BM25 scores for passages and return with passage text."""
+    """Rank documents using the BM25 scoring function.
+
+    Parameters
+    ----------
+    query : str
+        The user query.
+    index : InvertedIndex
+        Index containing term statistics.
+    passages : dict
+        Mapping of document identifiers to text (for display purposes).
+    k1 : float, optional
+        Term frequency saturation parameter of BM25.
+    b : float, optional
+        Length normalization parameter of BM25.
+
+    Returns
+    -------
+    list[tuple[str, float, str]]
+        Ranked list of document ids, scores and truncated document text.
+
+    Notes
+    -----
+    The BM25 score for a term ``t`` in document ``d`` is computed as::
+
+        idf(t) * ( (k1 + 1) * tf ) / (k1 * ((1 - b) + b * (|d| / avgdl)) + tf)
+
+    where ``tf`` is the term frequency, ``|d|`` is the document length and
+    ``avgdl`` is the average document length of the collection. ``idf`` is
+    computed as ``log(N / df)`` with ``N`` the total number of documents and
+    ``df`` the document frequency of the term.
+    """
     scores = defaultdict(float)
     query_terms = preprocess(query)
     N = index.total_docs
@@ -113,7 +183,32 @@ def bm25_score(query, index, passages, k1=1.5, b=0.75):
     return results
 
 def bim_score(query, index, passages):
-    """Compute BIM scores for passages and return with passage text."""
+    """Compute scores using the Binary Independence Model (BIM).
+
+    Parameters
+    ----------
+    query : str
+        The user query.
+    index : InvertedIndex
+        Index containing term statistics.
+    passages : dict
+        Mapping of document identifiers to text for display.
+
+    Returns
+    -------
+    list[tuple[str, float, str]]
+        Ranked list of document ids, scores and truncated document text.
+
+    Notes
+    -----
+    Terms are weighted by ``c_i`` where::
+
+        c_i = log( (p_i / u_i) * ((1 - u_i) / (1 - p_i)) )
+
+    and ``p_i`` is the probability of relevance for the term, estimated as
+    ``df / N`` with ``df`` the document frequency and ``N`` the number of
+    documents. ``u_i`` is ``1 - p_i``.
+    """
     scores = defaultdict(float)
     query_terms = preprocess(query)
     N = index.total_docs
@@ -130,7 +225,37 @@ def bim_score(query, index, passages):
     return results
 
 def relevance_feedback(index, query, relevant_docs, passages):
-    """Update rankings with relevance feedback and return with passage text."""
+    """Re-rank documents using explicit relevance feedback.
+
+    Parameters
+    ----------
+    index : InvertedIndex
+        Index containing term statistics.
+    query : str
+        The original user query.
+    relevant_docs : list[str]
+        Document identifiers that the user has marked relevant.
+    passages : dict
+        Mapping of document identifiers to text for display.
+
+    Returns
+    -------
+    list[tuple[str, float, str]]
+        Ranked list of document ids, scores and truncated document text.
+
+    Notes
+    -----
+    For each query term ``t`` the weight ``c_i`` is computed as::
+
+        p_i = (VR_i + 0.5) / (|VR| + 1)
+        u_i = (df - VR_i + 0.5) / (N - |VR| + 1)
+        c_i = log( p_i / (1 - p_i) * (1 - u_i) / u_i )
+
+    where ``VR_i`` is the number of relevant documents containing ``t``,
+    ``df`` is the document frequency of ``t``, ``N`` is the total number of
+    documents and ``|VR|`` is the number of relevant documents.
+    The final score of a document is ``c_i * tf`` summed over query terms.
+    """
     query_terms = preprocess(query)
     N = index.total_docs
     VR = set(relevant_docs)
@@ -149,13 +274,46 @@ def relevance_feedback(index, query, relevant_docs, passages):
     return results
 
 def pseudo_relevance_feedback(index, query, passages, k=2):
-    """Apply pseudo-relevance feedback using top k passages."""
+    """Perform pseudo-relevance feedback.
+
+    Parameters
+    ----------
+    index : InvertedIndex
+        Index used for retrieval.
+    query : str
+        The original user query.
+    passages : dict
+        Mapping of document identifiers to text.
+    k : int, optional
+        Number of top ranked documents assumed to be relevant.
+
+    Returns
+    -------
+    list[tuple[str, float, str]]
+        Ranking obtained after one round of feedback using the top ``k``
+        results from BM25 as the relevant set.
+    """
     initial_ranking = bm25_score(query, index, passages)[:k]
     relevant_docs = [doc_id for doc_id, _, _ in initial_ranking]
     return relevance_feedback(index, query, relevant_docs, passages)
 
 def evaluate_system(index, queries, qrels):
-    """Evaluate the system using Mean Average Precision (MAP)."""
+    """Evaluate retrieval performance using Mean Average Precision (MAP).
+
+    Parameters
+    ----------
+    index : InvertedIndex
+        Index used for retrieval.
+    queries : dict
+        Mapping from query ids to query strings.
+    qrels : dict
+        Relevance judgments mapping query ids to lists of relevant documents.
+
+    Returns
+    -------
+    float
+        The MAP score over all queries.
+    """
     map_score = 0
     for query_id, query in queries.items():
         ranking = bm25_score(query, index, passages={})  # Passages not needed for MAP
@@ -171,7 +329,15 @@ def evaluate_system(index, queries, qrels):
     return map_score / len(queries) if queries else 0
 
 def print_ranking(title, ranking):
-    """Print ranking results in a formatted way."""
+    """Pretty-print a ranking to the console.
+
+    Parameters
+    ----------
+    title : str
+        Heading displayed above the ranking.
+    ranking : list[tuple[str, float, str]]
+        List of ``(doc_id, score, text)`` tuples to display.
+    """
     print(f"\n{title}:")
     if not ranking:
         print("No results found.")
