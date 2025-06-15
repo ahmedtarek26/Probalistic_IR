@@ -28,7 +28,7 @@ We apply these models on the [20 Newsgroups Dataset](https://www.kaggle.com/data
 
 ---
 
-## ✅ Step-by-Step Explanation
+## Step-by-Step Explanation
 
 ### ① Document and Query Representation
 
@@ -142,16 +142,6 @@ $$
 $$
 RSV_{D3} = 0.409 + 0.409 = 0.818
 $$
-
----
-
-## 📊 Results Snapshot
-
-| Document | BIM Score | BM25 Score |
-| -------- | --------- | ---------- |
-| D3       | -0.614    | 0.818      |
-| D2       | -0.307    | 0.752      |
-| D1       | -0.307    | 0.671      |
 
 ---
 
